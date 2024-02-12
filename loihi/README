@@ -1,0 +1,5 @@
+# Loihi Benchmarks
+
+Benchmark implementation in Lava and deployment to Loihi.
+
+Should be organized into the rest of the NeuroBench library.

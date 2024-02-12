@@ -1,0 +1,41 @@
+[I 2024-02-08 15:30:55.839 ServerApp] jupyter_lsp | extension was successfully linked.
+[I 2024-02-08 15:30:55.846 ServerApp] jupyter_server_terminals | extension was successfully linked.
+[I 2024-02-08 15:30:55.849 ServerApp] jupyterlab | extension was successfully linked.
+[I 2024-02-08 15:30:55.852 ServerApp] notebook | extension was successfully linked.
+[I 2024-02-08 15:30:56.110 ServerApp] notebook_shim | extension was successfully linked.
+[I 2024-02-08 15:30:56.132 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2024-02-08 15:30:56.134 ServerApp] jupyter_lsp | extension was successfully loaded.
+[I 2024-02-08 15:30:56.134 ServerApp] jupyter_server_terminals | extension was successfully loaded.
+[I 2024-02-08 15:30:56.137 LabApp] JupyterLab extension loaded from /homes/jyik/lava_env/lib/python3.10/site-packages/jupyterlab
+[I 2024-02-08 15:30:56.137 LabApp] JupyterLab application directory is /homes/jyik/lava_env/share/jupyter/lab
+[I 2024-02-08 15:30:56.138 LabApp] Extension Manager is 'pypi'.
+[I 2024-02-08 15:30:56.164 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2024-02-08 15:30:56.168 ServerApp] notebook | extension was successfully loaded.
+[I 2024-02-08 15:30:56.169 ServerApp] Serving notebooks from local directory: /homes/jyik/neurobench/loihi
+[I 2024-02-08 15:30:56.169 ServerApp] Jupyter Server 2.12.5 is running at:
+[I 2024-02-08 15:30:56.169 ServerApp] http://localhost:3000/lab?token=397b5d945c139dbb807264489ae32b9885e35264ea3a674f
+[I 2024-02-08 15:30:56.169 ServerApp]     http://127.0.0.1:3000/lab?token=397b5d945c139dbb807264489ae32b9885e35264ea3a674f
+[I 2024-02-08 15:30:56.169 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[C 2024-02-08 15:30:56.180 ServerApp] 
+    
+    To access the server, open this file in a browser:
+        file:///homes/jyik/.local/share/jupyter/runtime/jpserver-748842-open.html
+    Or copy and paste one of these URLs:
+        http://localhost:3000/lab?token=397b5d945c139dbb807264489ae32b9885e35264ea3a674f
+        http://127.0.0.1:3000/lab?token=397b5d945c139dbb807264489ae32b9885e35264ea3a674f
+[I 2024-02-08 15:30:56.200 ServerApp] Skipped non-installed server(s): bash-language-server, dockerfile-language-server-nodejs, javascript-typescript-langserver, jedi-language-server, julia-language-server, pyright, python-language-server, python-lsp-server, r-languageserver, sql-language-server, texlab, typescript-language-server, unified-language-server, vscode-css-languageserver-bin, vscode-html-languageserver-bin, vscode-json-languageserver-bin, yaml-language-server
+[W 2024-02-08 15:30:59.575 LabApp] Could not determine jupyterlab build status without nodejs
+[W 2024-02-08 15:30:59.913 ServerApp] 404 GET /api/contents/misc/lava_loihi-0.6.0/tutorials/end_to_end/tutorialX01_mnist_digit_classification.ipynb?content=0&hash=0&1707435059859 (88734d721c4a4552a540ee4e0c36f123@127.0.0.1) 1.22ms referer=http://localhost:3000/lab/tree/neurobench/loihi/gsc.py
+[W 2024-02-08 15:30:59.914 ServerApp] 404 GET /api/contents/misc/lava_loihi-0.6.0/tutorials/end_to_end/tutorialX01_mnist_digit_classification.ipynb?content=0&hash=0&1707435059859 (127.0.0.1): No such file or directory: misc/lava_loihi-0.6.0/tutorials/end_to_end/tutorialX01_mnist_digit_classification.ipynb
+[W 2024-02-08 15:30:59.916 ServerApp] 404 GET /api/contents/neurobench/loihi/gsc.py?content=0&hash=0&1707435059860 (88734d721c4a4552a540ee4e0c36f123@127.0.0.1) 1.23ms referer=http://localhost:3000/lab/tree/neurobench/loihi/gsc.py
+[W 2024-02-08 15:30:59.916 ServerApp] 404 GET /api/contents/neurobench/loihi/gsc.py?content=0&hash=0&1707435059860 (127.0.0.1): No such file or directory: neurobench/loihi/gsc.py
+[W 2024-02-08 15:30:59.916 ServerApp] 404 GET /api/contents/neurobench/neurobench/benchmarks/benchmark.py?content=0&hash=0&1707435059860 (88734d721c4a4552a540ee4e0c36f123@127.0.0.1) 1.74ms referer=http://localhost:3000/lab/tree/neurobench/loihi/gsc.py
+[W 2024-02-08 15:30:59.917 ServerApp] 404 GET /api/contents/neurobench/neurobench/benchmarks/benchmark.py?content=0&hash=0&1707435059860 (127.0.0.1): No such file or directory: neurobench/neurobench/benchmarks/benchmark.py
+[W 2024-02-08 15:30:59.917 ServerApp] 404 GET /api/contents/neurosys/project/ff.py?content=0&hash=0&1707435059860 (88734d721c4a4552a540ee4e0c36f123@127.0.0.1) 2.42ms referer=http://localhost:3000/lab/tree/neurobench/loihi/gsc.py
+[W 2024-02-08 15:30:59.917 ServerApp] 404 GET /api/contents/neurosys/project/ff.py?content=0&hash=0&1707435059860 (127.0.0.1): No such file or directory: neurosys/project/ff.py
+[I 2024-02-08 15:31:00.021 ServerApp] New terminal with automatic name: 1
+[W 2024-02-08 15:31:00.949 ServerApp] 404 GET /api/contents/neurobench/loihi/gsc.py?content=0&hash=0&1707435060892 (88734d721c4a4552a540ee4e0c36f123@127.0.0.1) 1.50ms referer=http://localhost:3000/lab/tree/neurobench/loihi/gsc.py
+[W 2024-02-08 15:31:00.949 ServerApp] 404 GET /api/contents/neurobench/loihi/gsc.py?content=0&hash=0&1707435060892 (127.0.0.1): No such file or directory: neurobench/loihi/gsc.py
+[I 2024-02-08 15:33:15.338 ServerApp] Saving file at /gsc.py
+[I 2024-02-08 15:34:10.379 ServerApp] Saving file at /gsc.py
+[I 2024-02-08 15:34:20.980 ServerApp] Interrupted...
