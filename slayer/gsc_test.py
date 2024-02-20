@@ -14,8 +14,9 @@ import lava.lib.dl.slayer as slayer
 
 from neurobench.datasets.speech_commands import SpeechCommands
 from neurobench.preprocessing import S2SPreProcessor
+from neurobench.postprocessing import choose_max_count
 
-import wandb
+from tqdm import tqdm
 
 # Hyperparameters found via wandb sweep
 BATCH_SIZE = 32
@@ -39,6 +40,10 @@ class Network(torch.nn.Module):
         #         'scale_grad'    : 3,
         #         'requires_grad' : False,
         #     }
+        # # neuron_params_drop = {
+        # #         **neuron_params,
+        # #         'dropout' : slayer.neuron.Dropout(p=0.05),
+        # #     }
         neuron_params = {
                 'threshold'     : THRESHOLD,
                 'current_decay' : CURRENT_DECAY,
@@ -55,16 +60,16 @@ class Network(torch.nn.Module):
 
         self.blocks = torch.nn.ModuleList([
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, 20, 256, weight_norm=True,
+                    neuron_params_drop, 20, 256,
                 ),
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, 256, 256, weight_norm=True,
+                    neuron_params_drop, 256, 256,
                 ),
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, 256, 256, weight_norm=True,
+                    neuron_params_drop, 256, 256,
                 ),
                 slayer.block.cuba.Dense(
-                    neuron_params, 256, 35, weight_norm=True,
+                    neuron_params, 256, 35,
                 ),
             ])
 
@@ -99,77 +104,34 @@ class Network(torch.nn.Module):
 
 
 if __name__ == '__main__':
-    trained_folder = 'kangaroo_gsc_trained_weight_norm'
-    os.makedirs(trained_folder, exist_ok=True)
-
     # device = torch.device('cpu')
     device = torch.device('cuda')
 
     net = Network().to(device)
-
-    optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE)
+    net.load_state_dict(torch.load('kangaroo_gsc_trained/network.pt'))
 
     data_dir = './data/speech_commands/'
-    training_set = SpeechCommands(path=data_dir, subset="training")
-    val_set = SpeechCommands(path=data_dir, subset="validation")
+    test_set = SpeechCommands(path=data_dir, subset="testing")
 
     s2s = S2SPreProcessor()
+    test_loader = DataLoader(dataset=test_set, batch_size=256, shuffle=True)
 
-    train_loader = DataLoader(
-            dataset=training_set, batch_size=BATCH_SIZE, shuffle=True
-        )
-    test_loader = DataLoader(dataset=val_set, batch_size=256, shuffle=True)
+    total = 0
+    correct = 0
 
-    error = slayer.loss.SpikeRate(
-            true_rate=0.25, false_rate=0.025, reduction='sum'
-        ).to(device)
+    for data in tqdm(test_loader):
+        spikes, label = s2s(data)
+        spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
 
-    stats = slayer.utils.LearningStats()
-    assistant = slayer.utils.Assistant(
-            net, error, optimizer, stats,
-            classifier=slayer.classifier.Rate.predict, count_log=True
-        )
+        spikes = spikes.to(device)
 
-    epochs = EPOCHS
+        net.eval()
 
-    # Just run for more epochs
-    epochs = epochs + 100
+        output, count = net(spikes)
 
-    wandb.init(project="slayer_gsc")
+        pred = choose_max_count(output.transpose(1, 2).to("cpu"))
 
-    for epoch in range(epochs):
-        for i, data in enumerate(train_loader):  # training loop
-            spikes, label = s2s(data)
-            spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
+        total += label.size(0)
+        correct += (pred == label).sum().item()
 
-            output, count = assistant.train(spikes, label)
-            header = [
-                    'Event rate : ' +
-                    ', '.join([f'{c.item():.4f}' for c in count.flatten()])
-                ]
-            stats.print(epoch, iter=i, header=header, dataloader=train_loader)
-
-        for i, data in enumerate(test_loader):  # testing loop
-            spikes, label = s2s(data)
-            spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
-
-            output, count = assistant.test(spikes, label)
-            header = [
-                    'Event rate : ' +
-                    ', '.join([f'{c.item():.4f}' for c in count.flatten()])
-                ]
-            stats.print(epoch, iter=i, header=header, dataloader=test_loader)
-
-        wandb.log({
-            "epoch": epoch,
-            "train_loss": stats.training.loss,
-            "train_acc": stats.training.accuracy,
-            "val_loss": stats.testing.loss,
-            "val_acc": stats.testing.accuracy})
-
-        if stats.testing.best_accuracy:
-            torch.save(net.state_dict(), trained_folder + '/network.pt')
-        stats.update()
-        stats.save(trained_folder + '/')
-        stats.plot(path=trained_folder + '/')
-        net.grad_flow(trained_folder + '/')
+    print(f'Accuracy: {100 * correct / total:.2f}%')
