@@ -20,9 +20,11 @@ from lava.proc.io.sink import RingBuffer as Sink
 from lava.magma.core.run_conditions import RunSteps
 from lava.magma.core.run_configs import Loihi2SimCfg
 
-# This works for the NeuroBench S2S, which has 201/20 timesteps/features.
-NUM_TIMESTEPS = 201 # timesteps for S2S GSC sample
-NUM_FEATURES = 20 # features of S2S GSC sample
+import time
+import random
+
+NUM_TIMESTEPS = 128 # timesteps for S2S GSC sample
+NUM_FEATURES = 128 # features of S2S GSC sample
 NUM_CLASSES = 35
 
 class S2S_GSC_DataLoader():
@@ -30,11 +32,14 @@ class S2S_GSC_DataLoader():
     def __init__(self):
         self.dataset = SpeechCommands(path="./data/speech_commands/", subset="testing")
         self.s2s = S2SPreProcessor()
+        config_change = {"hop_length": 125, "n_mels": 128} # 128 timesteps, 128 features
+        self.s2s.configure(**config_change)
 
     def __getitem__(self, idx):
         data, label = self.dataset[idx] # data = (timestep, feature)
         data = data.unsqueeze(0) # (1, timestep, feature)
-        data, label = self.s2s((data, label)) # (1, timestep, feature)
+        data, label = self.s2s((data, label)) # (timestep, feature)
+        data = data[1:,:] # remove the first timestep of each sample
         data = data.squeeze() # (timestep, feature)
         data = data.transpose(1, 0) # (feature, timestep)
         data = data.detach().numpy()
@@ -42,6 +47,11 @@ class S2S_GSC_DataLoader():
 
     def __len__(self):
         return len(self.dataset)
+
+def shuffle(length):
+    l = [i for i in range(length)]
+    random.shuffle(l)
+    return l
 
 # argparse for trained network path
 import argparse
@@ -73,11 +83,11 @@ correct = 0
 total = 0
 
 print("Starting run.")
-for data, label in tqdm(s2s_gsc_loader):
-    data = data.squeeze()
-    data = data.detach().numpy()
-    assert(data.shape == (NUM_FEATURES, NUM_TIMESTEPS))
-    sg.data.set(data)
+for i, (data, label) in enumerate(s2s_gsc_loader):
+    if i != 0:
+        data = data.squeeze()
+        data = data.detach().numpy()
+        sg.data.set(data)
 
     net.run(condition=RunSteps(num_steps=NUM_TIMESTEPS), run_cfg=run_config)            
     
@@ -100,6 +110,9 @@ for data, label in tqdm(s2s_gsc_loader):
     total += 1
 
 
+    print(f"\rAccuracy: {correct / total}", end="")
+
+print()
 net.stop()
 
 print("Accuracy:", correct / total)
