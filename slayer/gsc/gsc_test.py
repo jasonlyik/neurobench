@@ -60,16 +60,16 @@ class Network(torch.nn.Module):
 
         self.blocks = torch.nn.ModuleList([
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, 20, 256,
+                    neuron_params_drop, 128, 256, weight_norm=True,
                 ),
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, 256, 256,
+                    neuron_params_drop, 256, 256, weight_norm=True,
                 ),
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, 256, 256,
+                    neuron_params_drop, 256, 256, weight_norm=True,
                 ),
                 slayer.block.cuba.Dense(
-                    neuron_params, 256, 35,
+                    neuron_params, 256, 35, weight_norm=True,
                 ),
             ])
 
@@ -108,12 +108,14 @@ if __name__ == '__main__':
     device = torch.device('cuda')
 
     net = Network().to(device)
-    net.load_state_dict(torch.load('kangaroo_gsc_trained/network.pt'))
+    net.load_state_dict(torch.load('kangaroo_gsc_trained_128_128/network.pt'))
 
     data_dir = './data/speech_commands/'
     test_set = SpeechCommands(path=data_dir, subset="testing")
 
     s2s = S2SPreProcessor()
+    config_change = {"hop_length": 125, "n_mels": 128} # 128 timesteps, 128 features
+    s2s.configure(**config_change)
     test_loader = DataLoader(dataset=test_set, batch_size=256, shuffle=True)
 
     total = 0
@@ -121,6 +123,7 @@ if __name__ == '__main__':
 
     for data in tqdm(test_loader):
         spikes, label = s2s(data)
+        spikes = spikes[:,1:,:] # remove the first timestep of each sample
         spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
 
         spikes = spikes.to(device)

@@ -17,34 +17,16 @@ from neurobench.preprocessing import S2SPreProcessor
 
 import wandb
 
-# Hyperparameters found via wandb sweep
-BATCH_SIZE = 32
-LEARNING_RATE = 0.00019202967172871096 # TODO: another sweep with higher learning rate?
-THRESHOLD = 1.0416058335115037
-CURRENT_DECAY = 0.20891491883617025
-VOLTAGE_DECAY = 0.04195080192500501
-TAU_GRAD = 0.015719635220654594
-SCALE_GRAD = 4.0
-EPOCHS = 50
-
 class Network(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, threshold=1.25, current_decay=0.25, voltage_decay=0.03, tau_grad=0.03, scale_grad=3):
         super(Network, self).__init__()
 
-        # neuron_params = {
-        #         'threshold'     : 1.25,
-        #         'current_decay' : 0.25,
-        #         'voltage_decay' : 0.03,
-        #         'tau_grad'      : 0.03,
-        #         'scale_grad'    : 3,
-        #         'requires_grad' : False,
-        #     }
         neuron_params = {
-                'threshold'     : THRESHOLD,
-                'current_decay' : CURRENT_DECAY,
-                'voltage_decay' : VOLTAGE_DECAY,
-                'tau_grad'      : TAU_GRAD,
-                'scale_grad'    : SCALE_GRAD,
+                'threshold'     : threshold,
+                'current_decay' : current_decay,
+                'voltage_decay' : voltage_decay,
+                'tau_grad'      : tau_grad,
+                'scale_grad'    : scale_grad,
                 'requires_grad' : True,
             }
         neuron_params_drop = {
@@ -55,7 +37,7 @@ class Network(torch.nn.Module):
 
         self.blocks = torch.nn.ModuleList([
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, 20, 256, weight_norm=True,
+                    neuron_params_drop, 80, 256, weight_norm=True,
                 ),
                 slayer.block.cuba.Dense(
                     neuron_params_drop, 256, 256, weight_norm=True,
@@ -97,31 +79,49 @@ class Network(torch.nn.Module):
         for i, b in enumerate(self.blocks):
             b.export_hdf5(layer.create_group(f'{i}'))
 
+def main():
+    wandb.init()
 
-if __name__ == '__main__':
-    trained_folder = 'kangaroo_gsc_trained_weight_norm'
-    os.makedirs(trained_folder, exist_ok=True)
-
-    # device = torch.device('cpu')
     device = torch.device('cuda')
 
-    net = Network().to(device)
+    batch_size = wandb.config.batch_size
+    epochs = wandb.config.epochs
+    lr = wandb.config.lr
+    neuron_threshold = wandb.config.neuron_threshold
+    current_decay = wandb.config.current_decay
+    voltage_decay = wandb.config.voltage_decay
+    tau_grad = wandb.config.tau_grad
+    scale_grad = wandb.config.scale_grad
+    true_rate = wandb.config.true_rate
+    false_rate = wandb.config.false_rate
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE)
+
+    # net = Network().to(device)
+    net = Network(
+        threshold=neuron_threshold,
+        current_decay=current_decay,
+        voltage_decay=voltage_decay,
+        tau_grad=tau_grad,
+        scale_grad=scale_grad
+    ).to(device)
+
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 
     data_dir = './data/speech_commands/'
     training_set = SpeechCommands(path=data_dir, subset="training")
     val_set = SpeechCommands(path=data_dir, subset="validation")
 
     s2s = S2SPreProcessor()
+    config_change = {"hop_length": 250, "n_mels": 80}
+    s2s.configure(**config_change)
 
     train_loader = DataLoader(
-            dataset=training_set, batch_size=BATCH_SIZE, shuffle=True
+            dataset=training_set, batch_size=batch_size, shuffle=True
         )
     test_loader = DataLoader(dataset=val_set, batch_size=256, shuffle=True)
 
     error = slayer.loss.SpikeRate(
-            true_rate=0.25, false_rate=0.025, reduction='sum'
+            true_rate=true_rate, false_rate=false_rate, reduction='sum'
         ).to(device)
 
     stats = slayer.utils.LearningStats()
@@ -130,16 +130,10 @@ if __name__ == '__main__':
             classifier=slayer.classifier.Rate.predict, count_log=True
         )
 
-    epochs = EPOCHS
-
-    # Just run for more epochs
-    epochs = epochs + 100
-
-    wandb.init(project="slayer_gsc")
-
     for epoch in range(epochs):
         for i, data in enumerate(train_loader):  # training loop
             spikes, label = s2s(data)
+            spikes = spikes[:,1:,:] # remove the first timestep of each sample
             spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
 
             output, count = assistant.train(spikes, label)
@@ -151,6 +145,7 @@ if __name__ == '__main__':
 
         for i, data in enumerate(test_loader):  # testing loop
             spikes, label = s2s(data)
+            spikes = spikes[:,1:,:] # remove the first timestep of each sample
             spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
 
             output, count = assistant.test(spikes, label)
@@ -159,17 +154,70 @@ if __name__ == '__main__':
                     ', '.join([f'{c.item():.4f}' for c in count.flatten()])
                 ]
             stats.print(epoch, iter=i, header=header, dataloader=test_loader)
+        
+        # if not stats.testing.best_accuracy:
+        #     print("No improvement in accuracy")
 
+        val_acc = stats.testing.accuracy
         wandb.log({
             "epoch": epoch,
             "train_loss": stats.training.loss,
             "train_acc": stats.training.accuracy,
             "val_loss": stats.testing.loss,
-            "val_acc": stats.testing.accuracy})
+            "val_acc": val_acc})
 
-        if stats.testing.best_accuracy:
-            torch.save(net.state_dict(), trained_folder + '/network.pt')
-        stats.update()
-        stats.save(trained_folder + '/')
-        stats.plot(path=trained_folder + '/')
-        net.grad_flow(trained_folder + '/')
+if __name__ == '__main__':
+    
+    # sweep_configuration = {
+    #     "method": "random",
+    #     "name": "sweep",
+    #     "metric": {"goal": "maximize", "name": "val_acc"},
+    #     "parameters": {
+    #         "batch_size": {"values": [16, 32, 64]},
+    #         "epochs": {"values": [50]},
+    #         "lr": {{"values": [.0001, 0.00005, 0.0002]}},
+    #         "neuron_threshold": {"values": [1.25, 1.5, 1.0]},
+    #         "current_decay": {"values": [0.25, 0.15, 0.35]},
+    #         "voltage_decay": {"values": [0.03, 0.05, 0.01]},
+    #         "tau_grad": {"values": [0.03, 0.05, 0.01]},
+    #         "scale_grad": {"values": [3, 4, 2]},
+    #     },
+    # }
+
+
+    # TODO: not looking at batch_size or epochs right now
+    # TODO: not taking into account dropout, whether threshold is trainable
+    # TODO: also maximizing for val_acc now, and not minimizing spike count
+    sweep_configuration = {
+        "method": "bayes",
+        "name": "64step_80feature",
+        "metric": {"goal": "maximize", "name": "val_acc"},
+        "parameters": {
+            "batch_size": {"values": [32]},
+            "epochs": {"values": [50]},
+            "lr": {"min": 0.0005, "max": 0.002},
+            "neuron_threshold": {"min": 1.0, "max": 1.5},
+            "current_decay": {"min": 0.15, "max": 0.35},
+            "voltage_decay": {"min": 0.01, "max": 0.05},
+            "tau_grad": {"min": 0.01, "max": 0.05},
+            "scale_grad": {"min": 2, "max": 4},
+            "true_rate": {"min": 0.20, "max": 0.40},
+            "false_rate": {"min": 0.02, "max": 0.10},
+        },
+    }
+
+    sweep_id = wandb.sweep(sweep_configuration, project="slayer_gsc")
+
+    wandb.agent(sweep_id, function=main, count=35)
+
+    # wandb.init(project='slayer_gsc')
+
+    # trained_folder = 'cluster_gsc_trained'
+    # os.makedirs(trained_folder, exist_ok=True)
+
+    # if stats.testing.best_accuracy:
+    #     torch.save(net.state_dict(), trained_folder + '/network.pt')
+    # stats.update()
+    # stats.save(trained_folder + '/')
+    # stats.plot(path=trained_folder + '/')
+    # net.grad_flow(trained_folder + '/')

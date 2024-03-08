@@ -1,0 +1,7 @@
+kangaroo_gsc_trained: 79.% accuracy
+- 201 timesteps
+- 20 features
+
+kangaroo_gsc_trained_64_80: ?? accuracy
+- 64 timesteps
+- 80 features

@@ -12,12 +12,13 @@ from torch.utils.data import Dataset, DataLoader
 
 import lava.lib.dl.slayer as slayer
 
-from neurobench.datasets.primate_reaching import PrimateReaching
+from neurobench.datasets.speech_commands import SpeechCommands
+from neurobench.preprocessing import S2SPreProcessor
 
 import wandb
 
 class Network(torch.nn.Module):
-    def __init__(self, input_size=96, threshold=1.25, current_decay=0.25, voltage_decay=0.03, tau_grad=0.03, scale_grad=3):
+    def __init__(self, threshold=1.25, current_decay=0.25, voltage_decay=0.03, tau_grad=0.03, scale_grad=3):
         super(Network, self).__init__()
 
         neuron_params = {
@@ -36,18 +37,18 @@ class Network(torch.nn.Module):
 
         self.blocks = torch.nn.ModuleList([
                 slayer.block.cuba.Dense(
-                    neuron_params_drop, input_size, 50, weight_norm=True,
+                    neuron_params_drop, 128, 256, weight_norm=True,
                 ),
-                slayer.block.cuba.Affine(
-                    neuron_params_drop, 50, 2, weight_norm=True,
+                slayer.block.cuba.Dense(
+                    neuron_params_drop, 256, 256, weight_norm=True,
+                ),
+                slayer.block.cuba.Dense(
+                    neuron_params_drop, 256, 256, weight_norm=True,
+                ),
+                slayer.block.cuba.Dense(
+                    neuron_params, 256, 35, weight_norm=True,
                 ),
             ])
-
-        # TODO: last layer needs to read voltage, see how to train pilotnet with SLAYER through their example
-
-
-        # TODO: assuming that this will lose a lot of R2 due to quantization
-        # TODO: can try to set bias = False in Dense layers
 
     def forward(self, spike):
         count = []
@@ -79,8 +80,7 @@ class Network(torch.nn.Module):
             b.export_hdf5(layer.create_group(f'{i}'))
 
 def main():
-    wandb.init(mode="disabled")
-    # wandb.init()
+    wandb.init()
 
     device = torch.device('cuda')
 
@@ -92,6 +92,11 @@ def main():
     voltage_decay = wandb.config.voltage_decay
     tau_grad = wandb.config.tau_grad
     scale_grad = wandb.config.scale_grad
+    # true_rate = wandb.config.true_rate
+    # false_rate = wandb.config.false_rate
+
+    true_rate = 0.25
+    false_rate = 0.025
 
 
     # net = Network().to(device)
@@ -110,6 +115,8 @@ def main():
     val_set = SpeechCommands(path=data_dir, subset="validation")
 
     s2s = S2SPreProcessor()
+    config_change = {"hop_length": 125, "n_mels": 128} # 128 timesteps, 128 features
+    s2s.configure(**config_change)
 
     train_loader = DataLoader(
             dataset=training_set, batch_size=batch_size, shuffle=True
@@ -117,7 +124,7 @@ def main():
     test_loader = DataLoader(dataset=val_set, batch_size=256, shuffle=True)
 
     error = slayer.loss.SpikeRate(
-            true_rate=0.25, false_rate=0.025, reduction='sum'
+            true_rate=true_rate, false_rate=false_rate, reduction='sum'
         ).to(device)
 
     stats = slayer.utils.LearningStats()
@@ -129,6 +136,7 @@ def main():
     for epoch in range(epochs):
         for i, data in enumerate(train_loader):  # training loop
             spikes, label = s2s(data)
+            spikes = spikes[:,1:,:] # remove the first timestep of each sample
             spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
 
             output, count = assistant.train(spikes, label)
@@ -140,6 +148,7 @@ def main():
 
         for i, data in enumerate(test_loader):  # testing loop
             spikes, label = s2s(data)
+            spikes = spikes[:,1:,:] # remove the first timestep of each sample
             spikes = spikes.transpose(1, 2) # lava-dl expects timesteps last dim
 
             output, count = assistant.test(spikes, label)
@@ -149,8 +158,8 @@ def main():
                 ]
             stats.print(epoch, iter=i, header=header, dataloader=test_loader)
         
-        if not stats.testing.best_accuracy:
-            print("No improvement in accuracy")
+        # if not stats.testing.best_accuracy:
+        #     print("No improvement in accuracy")
 
         val_acc = stats.testing.accuracy
         wandb.log({
@@ -184,24 +193,25 @@ if __name__ == '__main__':
     # TODO: also maximizing for val_acc now, and not minimizing spike count
     sweep_configuration = {
         "method": "bayes",
-        "name": "disabled",
+        "name": "128step_128feature",
         "metric": {"goal": "maximize", "name": "val_acc"},
         "parameters": {
-            "batch_size": {"values": [32, 64]},
+            "batch_size": {"values": [32]},
             "epochs": {"values": [50]},
-            "lr": {"min": 0.0005, "max": 0.002},
+            "lr": {"values": [0.001]},
             "neuron_threshold": {"min": 1.0, "max": 1.5},
-            "current_decay": {"min": 0.15, "max": 0.35},
+            "current_decay": {"min": 0.25, "max": 0.40},
             "voltage_decay": {"min": 0.01, "max": 0.05},
             "tau_grad": {"min": 0.01, "max": 0.05},
-            "scale_grad": {"min": 2, "max": 4},
+            "scale_grad": {"values": [4]},
+            # "true_rate": {"min": 0.20, "max": 0.40},
+            # "false_rate": {"min": 0.02, "max": 0.10},
         },
-        "run_cap": 2,
     }
 
     sweep_id = wandb.sweep(sweep_configuration, project="slayer_gsc")
 
-    wandb.agent(sweep_id, function=main)
+    wandb.agent(sweep_id, function=main, count=35)
 
     # wandb.init(project='slayer_gsc')
 

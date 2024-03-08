@@ -18,15 +18,15 @@ from neurobench.preprocessing import S2SPreProcessor
 import wandb
 
 class Network(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, threshold=1.25, current_decay=0.25, voltage_decay=0.03, tau_grad=0.03, scale_grad=3):
         super(Network, self).__init__()
 
         neuron_params = {
-                'threshold'     : 1.25,
-                'current_decay' : 0.25,
-                'voltage_decay' : 0.03,
-                'tau_grad'      : 0.03,
-                'scale_grad'    : 3,
+                'threshold'     : threshold,
+                'current_decay' : current_decay,
+                'voltage_decay' : voltage_decay,
+                'tau_grad'      : tau_grad,
+                'scale_grad'    : scale_grad,
                 'requires_grad' : True,
             }
         neuron_params_drop = {
@@ -80,19 +80,33 @@ class Network(torch.nn.Module):
             b.export_hdf5(layer.create_group(f'{i}'))
 
 def main():
-    wandb.init()
+    wandb.init(mode="disabled")
+    # wandb.init()
 
     device = torch.device('cuda')
 
     batch_size = wandb.config.batch_size
     epochs = wandb.config.epochs
     lr = wandb.config.lr
+    neuron_threshold = wandb.config.neuron_threshold
+    current_decay = wandb.config.current_decay
+    voltage_decay = wandb.config.voltage_decay
+    tau_grad = wandb.config.tau_grad
+    scale_grad = wandb.config.scale_grad
 
-    net = Network().to(device)
+
+    # net = Network().to(device)
+    net = Network(
+        threshold=neuron_threshold,
+        current_decay=current_decay,
+        voltage_decay=voltage_decay,
+        tau_grad=tau_grad,
+        scale_grad=scale_grad
+    ).to(device)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 
-    data_dir = '../data/speech_commands/'
+    data_dir = './data/speech_commands/'
     training_set = SpeechCommands(path=data_dir, subset="training")
     val_set = SpeechCommands(path=data_dir, subset="validation")
 
@@ -136,6 +150,9 @@ def main():
                 ]
             stats.print(epoch, iter=i, header=header, dataloader=test_loader)
         
+        if not stats.testing.best_accuracy:
+            print("No improvement in accuracy")
+
         val_acc = stats.testing.accuracy
         wandb.log({
             "epoch": epoch,
@@ -145,15 +162,42 @@ def main():
             "val_acc": val_acc})
 
 if __name__ == '__main__':
+    
+    # sweep_configuration = {
+    #     "method": "random",
+    #     "name": "sweep",
+    #     "metric": {"goal": "maximize", "name": "val_acc"},
+    #     "parameters": {
+    #         "batch_size": {"values": [16, 32, 64]},
+    #         "epochs": {"values": [50]},
+    #         "lr": {{"values": [.0001, 0.00005, 0.0002]}},
+    #         "neuron_threshold": {"values": [1.25, 1.5, 1.0]},
+    #         "current_decay": {"values": [0.25, 0.15, 0.35]},
+    #         "voltage_decay": {"values": [0.03, 0.05, 0.01]},
+    #         "tau_grad": {"values": [0.03, 0.05, 0.01]},
+    #         "scale_grad": {"values": [3, 4, 2]},
+    #     },
+    # }
+
+
+    # TODO: not looking at batch_size or epochs right now
+    # TODO: not taking into account dropout, whether threshold is trainable
+    # TODO: also maximizing for val_acc now, and not minimizing spike count
     sweep_configuration = {
-        "method": "random",
-        "name": "sweep",
+        "method": "bayes",
+        "name": "disabled",
         "metric": {"goal": "maximize", "name": "val_acc"},
         "parameters": {
-            "batch_size": {"values": [16, 32, 64]},
-            "epochs": {"values": [20, 50]},
-            "lr": {"max": 0.1, "min": 0.0001},
+            "batch_size": {"values": [32, 64]},
+            "epochs": {"values": [50]},
+            "lr": {"min": 0.0005, "max": 0.002},
+            "neuron_threshold": {"min": 1.0, "max": 1.5},
+            "current_decay": {"min": 0.15, "max": 0.35},
+            "voltage_decay": {"min": 0.01, "max": 0.05},
+            "tau_grad": {"min": 0.01, "max": 0.05},
+            "scale_grad": {"min": 2, "max": 4},
         },
+        "run_cap": 2,
     }
 
     sweep_id = wandb.sweep(sweep_configuration, project="slayer_gsc")
