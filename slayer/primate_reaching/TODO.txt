@@ -1,0 +1,3 @@
+- Startup sweep with the existing SNN, need to see how well we can do with 8 bit precision
+- Checkout sigma-delta neuron model instead of CUBA-LIF, appears to be much more stable on regression
+
